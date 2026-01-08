@@ -1,11 +1,11 @@
 import React, { useState, ChangeEvent } from 'react';
-import { Upload, FileText, X, Sparkles, FileType } from 'lucide-react';
+import { Upload, FileText, X, Sparkles, FileType, Plus, Image as ImageIcon } from 'lucide-react';
 
 interface SetupFormProps {
   onGenerate: (
     sourceText: string, 
-    sourceFile: File | null,
-    styleFile: File | null, 
+    sourceFiles: File[],
+    styleFiles: File[], 
     difficulty: 'easy' | 'medium' | 'hard', 
     count: number
   ) => void;
@@ -14,33 +14,38 @@ interface SetupFormProps {
 
 export const SetupForm: React.FC<SetupFormProps> = ({ onGenerate, isGenerating }) => {
   const [sourceText, setSourceText] = useState('');
-  const [sourceFile, setSourceFile] = useState<File | null>(null);
-  const [styleFile, setStyleFile] = useState<File | null>(null);
+  const [sourceFiles, setSourceFiles] = useState<File[]>([]);
+  const [styleFiles, setStyleFiles] = useState<File[]>([]);
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [count, setCount] = useState(5);
 
-  const handleSourceFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSourceFile(e.target.files[0]);
+  const handleSourceFilesChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setSourceFiles(prev => [...prev, ...Array.from(e.target.files!)]);
     }
   };
 
-  const handleStyleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setStyleFile(e.target.files[0]);
+  const handleStyleFilesChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setStyleFiles(prev => [...prev, ...Array.from(e.target.files!)]);
     }
   };
 
-  const removeSourceFile = () => setSourceFile(null);
-  const removeStyleFile = () => setStyleFile(null);
+  const removeSourceFile = (index: number) => {
+    setSourceFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeStyleFile = (index: number) => {
+    setStyleFiles(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sourceText.trim() && !sourceFile) return;
-    onGenerate(sourceText, sourceFile, styleFile, difficulty, count);
+    if (!sourceText.trim() && sourceFiles.length === 0) return;
+    onGenerate(sourceText, sourceFiles, styleFiles, difficulty, count);
   };
 
-  const isSubmitDisabled = isGenerating || (!sourceText.trim() && !sourceFile);
+  const isSubmitDisabled = isGenerating || (!sourceText.trim() && sourceFiles.length === 0);
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
@@ -50,7 +55,7 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onGenerate, isGenerating }
           Quiz Oluşturucu
         </h2>
         <p className="text-indigo-100 mt-2">
-          İçerik yükleyin (Metin, PDF, DOCX, HTML) ve AI soruları hazırlasın.
+          İçerik yükleyin (Metin, PDF, DOCX, HTML, Resim) ve AI soruları hazırlasın.
         </p>
       </div>
       
@@ -85,36 +90,46 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onGenerate, isGenerating }
             </div>
           </div>
 
-          <div>
-             {!sourceFile ? (
-               <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 hover:border-indigo-300 transition-all group">
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <div className="flex items-center gap-2 text-slate-400 group-hover:text-indigo-500 mb-1">
-                        <Upload className="w-6 h-6" />
-                        <span className="text-sm font-medium">Kaynak Dosya Seç</span>
-                      </div>
-                      <p className="text-xs text-slate-400">PDF, DOCX veya HTML</p>
-                  </div>
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    accept=".pdf,.docx,.html,.htm,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/html"
-                    onChange={handleSourceFileChange}
-                  />
-               </label>
-             ) : (
-                <div className="flex items-center justify-between p-3 bg-indigo-50 border border-indigo-100 rounded-lg">
-                  <div className="flex items-center gap-3 overflow-hidden">
-                    <FileType className="w-8 h-8 text-indigo-600 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-indigo-900 truncate">{sourceFile.name}</p>
-                      <p className="text-xs text-indigo-500">{(sourceFile.size / 1024).toFixed(1)} KB • Kaynak</p>
-                    </div>
-                  </div>
-                  <button type="button" onClick={removeSourceFile} className="p-1 hover:bg-indigo-100 rounded-full text-indigo-400 hover:text-indigo-700">
-                    <X className="w-5 h-5" />
-                  </button>
+          {/* Source File List */}
+          <div className="space-y-3">
+             <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 hover:border-indigo-300 transition-all group">
+                <div className="flex items-center gap-2 text-slate-400 group-hover:text-indigo-500">
+                  <Plus className="w-5 h-5" />
+                  <span className="text-sm font-medium">Kaynak Dosya Ekle</span>
                 </div>
+                <p className="text-[10px] text-slate-400 mt-1 text-center px-4">
+                  PDF, DOCX, HTML veya Resim (Ders notu fotoğrafı vb.)
+                </p>
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  multiple
+                  accept=".pdf,.docx,.html,.htm,.jpg,.jpeg,.png,.webp,image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/html"
+                  onChange={handleSourceFilesChange}
+                />
+             </label>
+
+             {sourceFiles.length > 0 && (
+               <div className="grid gap-2">
+                 {sourceFiles.map((file, idx) => (
+                   <div key={idx} className="flex items-center justify-between p-3 bg-indigo-50 border border-indigo-100 rounded-lg animate-fade-in">
+                     <div className="flex items-center gap-3 overflow-hidden">
+                       {file.type.startsWith('image/') ? (
+                         <ImageIcon className="w-5 h-5 text-indigo-600 flex-shrink-0" />
+                       ) : (
+                         <FileType className="w-5 h-5 text-indigo-600 flex-shrink-0" />
+                       )}
+                       <div className="min-w-0">
+                         <p className="text-sm font-medium text-indigo-900 truncate">{file.name}</p>
+                         <p className="text-[10px] text-indigo-500">{(file.size / 1024).toFixed(1)} KB</p>
+                       </div>
+                     </div>
+                     <button type="button" onClick={() => removeSourceFile(idx)} className="p-1 hover:bg-indigo-100 rounded-full text-indigo-400 hover:text-indigo-700">
+                       <X className="w-4 h-4" />
+                     </button>
+                   </div>
+                 ))}
+               </div>
              )}
           </div>
         </div>
@@ -126,37 +141,49 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onGenerate, isGenerating }
              <h3 className="text-lg font-semibold text-slate-800">Örnek Sınav Stili</h3>
           </div>
           
-          <div className="space-y-2">
-            {!styleFile ? (
-              <label className="flex items-center justify-center w-full h-16 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 hover:border-purple-300 transition-all group">
-                 <div className="flex items-center gap-2 text-slate-400 group-hover:text-purple-500">
-                   <FileText className="w-5 h-5" />
-                   <span className="text-sm">Örnek Sınav Yükle (PDF/DOCX)</span>
-                 </div>
-                 <input 
-                   type="file" 
-                   className="hidden" 
-                   accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                   onChange={handleStyleFileChange}
-                 />
-              </label>
-            ) : (
-              <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-100 rounded-lg">
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <FileText className="w-8 h-8 text-purple-600 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-purple-900 truncate">{styleFile.name}</p>
-                    <p className="text-xs text-purple-500">{(styleFile.size / 1024).toFixed(1)} KB • Stil</p>
-                  </div>
+          <div className="space-y-3">
+             <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 hover:border-purple-300 transition-all group">
+                <div className="flex items-center gap-2 text-slate-400 group-hover:text-purple-500">
+                  <FileText className="w-5 h-5" />
+                  <span className="text-sm">Örnek Sınav Yükle</span>
                 </div>
-                <button type="button" onClick={removeStyleFile} className="p-1 hover:bg-purple-100 rounded-full text-purple-400 hover:text-purple-700">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            )}
-            <p className="text-xs text-slate-400 px-1">
-              AI, soru tarzını ve zorluk yapısını bu dosyadan öğrenir.
+                <p className="text-[10px] text-slate-400 mt-1 text-center px-4">
+                  PDF, DOCX veya Sınav Fotoğrafı
+                </p>
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  multiple
+                  accept=".pdf,.docx,.jpg,.jpeg,.png,.webp,image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={handleStyleFilesChange}
+                />
+             </label>
+             <p className="text-xs text-slate-400 px-1">
+              AI, soru tarzını, zorluk seviyesini ve formatı bu dosyalardaki görsellerden veya metinlerden öğrenir.
             </p>
+
+            {styleFiles.length > 0 && (
+               <div className="grid gap-2">
+                 {styleFiles.map((file, idx) => (
+                   <div key={idx} className="flex items-center justify-between p-3 bg-purple-50 border border-purple-100 rounded-lg animate-fade-in">
+                     <div className="flex items-center gap-3 overflow-hidden">
+                       {file.type.startsWith('image/') ? (
+                         <ImageIcon className="w-5 h-5 text-purple-600 flex-shrink-0" />
+                       ) : (
+                         <FileText className="w-5 h-5 text-purple-600 flex-shrink-0" />
+                       )}
+                       <div className="min-w-0">
+                         <p className="text-sm font-medium text-purple-900 truncate">{file.name}</p>
+                         <p className="text-[10px] text-purple-500">{(file.size / 1024).toFixed(1)} KB</p>
+                       </div>
+                     </div>
+                     <button type="button" onClick={() => removeStyleFile(idx)} className="p-1 hover:bg-purple-100 rounded-full text-purple-400 hover:text-purple-700">
+                       <X className="w-4 h-4" />
+                     </button>
+                   </div>
+                 ))}
+               </div>
+             )}
           </div>
         </div>
 

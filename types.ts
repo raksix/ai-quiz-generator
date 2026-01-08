@@ -19,14 +19,18 @@ export enum AppState {
   RESULTS = 'RESULTS'
 }
 
+export interface ProcessedFile {
+  name: string;
+  mimeType: string;
+  data?: string; // Base64 data for PDF
+  text?: string; // Extracted text for DOCX/HTML
+  type: 'source' | 'style';
+}
+
 export interface GenerateQuizParams {
   sourceText: string;
-  sourceFileBase64?: string;
-  sourceFileMimeType?: string;
-  
-  styleFileBase64?: string;
-  styleFileMimeType?: string;
-  styleFileText?: string;
+  sourceFiles: ProcessedFile[];
+  styleFiles: ProcessedFile[];
   difficulty: 'easy' | 'medium' | 'hard';
   questionCount: number;
 }

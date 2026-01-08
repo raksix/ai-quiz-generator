@@ -3,7 +3,7 @@ import { SetupForm } from './components/SetupForm';
 import { QuizInterface } from './components/QuizInterface';
 import { ResultsView } from './components/ResultsView';
 import { generateQuizQuestions } from './services/geminiService';
-import { AppState, QuizQuestion, QuizResult } from './types';
+import { AppState, QuizQuestion, QuizResult, ProcessedFile } from './types';
 import { BookOpen } from 'lucide-react';
 import mammoth from 'mammoth';
 
@@ -22,7 +22,7 @@ const App: React.FC = () => {
            const base64Only = e.target.result.split(',')[1];
            resolve(base64Only);
         } else {
-          reject(new Error("Dosya okunamadı."));
+          reject(new Error(`Dosya okunamadı: ${file.name}`));
         }
       };
       reader.onerror = reject;
@@ -40,10 +40,35 @@ const App: React.FC = () => {
     });
   };
 
+  const processFile = async (file: File, type: 'source' | 'style'): Promise<ProcessedFile> => {
+    const processed: ProcessedFile = {
+      name: file.name,
+      mimeType: file.type,
+      type: type
+    };
+
+    if (file.type === "application/pdf") {
+      processed.data = await readFileAsBase64(file);
+      processed.mimeType = "application/pdf";
+    } else if (file.type.startsWith("image/")) {
+      // Handle Image files (JPEG, PNG, WEBP, etc.)
+      processed.data = await readFileAsBase64(file);
+      processed.mimeType = file.type;
+    } else if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      processed.text = result.value;
+    } else if (file.type === "text/html" || file.name.endsWith(".html") || file.name.endsWith(".htm")) {
+      processed.text = await readFileAsText(file);
+    }
+
+    return processed;
+  };
+
   const handleGenerate = async (
     sourceTextInput: string, 
-    sourceFile: File | null,
-    styleFile: File | null, 
+    sourceFiles: File[],
+    styleFiles: File[], 
     difficulty: 'easy' | 'medium' | 'hard', 
     count: number
   ) => {
@@ -51,50 +76,20 @@ const App: React.FC = () => {
     setError(null);
 
     try {
-      // 1. Process Source Content
-      let finalSourceText = sourceTextInput;
-      let sourceFileBase64: string | undefined = undefined;
-      let sourceFileMimeType: string | undefined = undefined;
+      // Process all source files
+      const processedSourceFiles: ProcessedFile[] = await Promise.all(
+        sourceFiles.map(file => processFile(file, 'source'))
+      );
 
-      if (sourceFile) {
-        if (sourceFile.type === "application/pdf") {
-          sourceFileBase64 = await readFileAsBase64(sourceFile);
-          sourceFileMimeType = "application/pdf";
-        } else if (sourceFile.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-          const arrayBuffer = await sourceFile.arrayBuffer();
-          const result = await mammoth.extractRawText({ arrayBuffer });
-          finalSourceText += `\n\n[EK DOSYA İÇERİĞİ (${sourceFile.name})]:\n${result.value}`;
-        } else if (sourceFile.type === "text/html" || sourceFile.name.endsWith(".html") || sourceFile.name.endsWith(".htm")) {
-          const text = await readFileAsText(sourceFile);
-          finalSourceText += `\n\n[EK DOSYA İÇERİĞİ (${sourceFile.name})]:\n${text}`;
-        }
-      }
-
-      // 2. Process Style File
-      let styleFileBase64: string | undefined = undefined;
-      let styleFileMimeType: string | undefined = undefined;
-      let styleFileText: string | undefined = undefined;
-
-      if (styleFile) {
-        if (styleFile.type === "application/pdf") {
-          styleFileBase64 = await readFileAsBase64(styleFile);
-          styleFileMimeType = "application/pdf";
-        } else if (styleFile.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-          const arrayBuffer = await styleFile.arrayBuffer();
-          const result = await mammoth.extractRawText({ arrayBuffer });
-          styleFileText = result.value;
-        }
-      }
+      // Process all style files
+      const processedStyleFiles: ProcessedFile[] = await Promise.all(
+        styleFiles.map(file => processFile(file, 'style'))
+      );
 
       const generatedQuestions = await generateQuizQuestions({
-        sourceText: finalSourceText,
-        sourceFileBase64,
-        sourceFileMimeType,
-        
-        styleFileBase64,
-        styleFileMimeType,
-        styleFileText,
-        
+        sourceText: sourceTextInput,
+        sourceFiles: processedSourceFiles,
+        styleFiles: processedStyleFiles,
         difficulty,
         questionCount: count
       });

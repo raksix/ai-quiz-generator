@@ -33,14 +33,34 @@ export const generateQuizQuestions = async (params: GenerateQuizParams): Promise
 
   const ai = new GoogleGenAI({ apiKey: processEnvApiKey });
 
-  const modelName = 'gemini-2.5-flash-latest'; 
+  // Use gemini-2.0-flash-exp for reliable multimodal support (images, pdfs)
+  const modelName = 'gemini-2.0-flash-exp'; 
 
-  // Construct instruction for style file/text
+  // Initialize parts with source text
+  let sourceContentText = params.sourceText;
+  
+  // Append text from source files (DOCX/HTML)
+  params.sourceFiles.forEach(file => {
+    if (file.text) {
+      sourceContentText += `\n\n[EK KAYNAK DOSYA: ${file.name}]:\n${file.text}`;
+    }
+  });
+
+  // Construct instruction for style files
   let styleInstruction = '';
-  if (params.styleFileBase64) {
-    styleInstruction = 'ÖNEMLİ: Ekteki stil/örnek sınav dosyasını analiz et. Oluşturacağın yeni soruların tonunu, soru tipini ve yapısını bu örnek dosyadaki sorulara benzet.';
-  } else if (params.styleFileText) {
-    styleInstruction = `ÖNEMLİ: Aşağıdaki "ÖRNEK SINAV METNİ"ni analiz et. Oluşturacağın yeni soruların tonunu, soru tipini ve yapısını buna benzet.\n\nÖRNEK SINAV METNİ:\n${params.styleFileText}\n-----------------------------------\n`;
+  let styleContentText = '';
+  
+  params.styleFiles.forEach(file => {
+    if (file.text) {
+      styleContentText += `\n\n[ÖRNEK SINAV METNİ: ${file.name}]:\n${file.text}`;
+    }
+  });
+
+  if (params.styleFiles.length > 0) {
+    styleInstruction = 'ÖNEMLİ: Ekteki örnek sınav/stil dosyalarını (PDF, görsel veya metin) analiz et. Oluşturacağın yeni soruların tonunu, soru tipini, zorluk seviyesini ve yapısını bu örneklerdeki sorulara benzet.';
+    if (styleContentText) {
+      styleInstruction += `\n\nAşağıdaki örnek metinleri de dikkate al:\n${styleContentText}\n-----------------------------------\n`;
+    }
   }
 
   const promptText = `
@@ -59,31 +79,35 @@ export const generateQuizQuestions = async (params: GenerateQuizParams): Promise
     ${styleInstruction}
     
     KAYNAK İÇERİK:
-    (Eğer bir dosya eklenmişse onun içeriğini, ve/veya aşağıdaki metni kullan)
-    "${params.sourceText}"
+    (Eğer dosya eklenmişse onların içeriğini, görsellerini ve/veya aşağıdaki metni kullan)
+    "${sourceContentText}"
   `;
 
   const parts: any[] = [{ text: promptText }];
 
-  // Add Source File PDF if exists
-  if (params.sourceFileBase64 && params.sourceFileMimeType) {
-     parts.push({
-      inlineData: {
-        data: params.sourceFileBase64,
-        mimeType: params.sourceFileMimeType
-      }
-    });
-  }
+  // Add Source Files (Images/PDFs)
+  params.sourceFiles.forEach(file => {
+    if (file.data && file.mimeType) {
+      parts.push({
+        inlineData: {
+          data: file.data,
+          mimeType: file.mimeType
+        }
+      });
+    }
+  });
 
-  // Add Style File PDF if exists
-  if (params.styleFileBase64 && params.styleFileMimeType) {
-    parts.push({
-      inlineData: {
-        data: params.styleFileBase64,
-        mimeType: params.styleFileMimeType
-      }
-    });
-  }
+  // Add Style Files (Images/PDFs)
+  params.styleFiles.forEach(file => {
+    if (file.data && file.mimeType) {
+      parts.push({
+        inlineData: {
+          data: file.data,
+          mimeType: file.mimeType
+        }
+      });
+    }
+  });
 
   try {
     const response = await ai.models.generateContent({
@@ -107,8 +131,20 @@ export const generateQuizQuestions = async (params: GenerateQuizParams): Promise
     const quizData = JSON.parse(text) as QuizQuestion[];
     return quizData;
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini API Error:", error);
-    throw new Error("Soru oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.");
+    
+    let errorMessage = "Soru oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.";
+    
+    // Check for specific error codes
+    if (error.message && error.message.includes("404")) {
+      errorMessage = "Hata: Seçilen yapay zeka modeli bulunamadı veya şu anda kullanılamıyor (404).";
+    } else if (error.status === 404) {
+       errorMessage = "Hata: Seçilen yapay zeka modeli bulunamadı (404).";
+    } else if (error.message) {
+      errorMessage = `Hata: ${error.message}`;
+    }
+    
+    throw new Error(errorMessage);
   }
 };
